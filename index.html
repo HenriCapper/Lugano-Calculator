@@ -2,10 +2,31 @@
 <html>
 <body>
 
+  <!-- Wrap entire content in a container so Shopify iframes can expand correctly -->
+  <div id="calc-container">
+
 
   <meta charset="utf-8">
   <title>Opus Hardware – Lugano Designer (beta)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <!-- Additional styles to ensure the page expands properly inside Shopify iframes -->
+  <style>
+    html, body {
+      height: auto !important;
+      min-height: 100% !important;
+      overflow-x: hidden !important;
+    }
+    /* Ensure wrapper expands to full width */
+    #calc-container {
+      width: 100%;
+      display: block;
+    }
+    /* Panels adapt to iframe width */
+    #calcCard, #shapePicker {
+      max-width: 100% !important;
+    }
+  </style>
 
   <!-- j        <div>
           <label>Fixing type</label>
@@ -6224,7 +6245,15 @@ updateViewBox();
   document.addEventListener("click", function () {
     setTimeout(sendHeight, 250);
   });
+
+  // Also observe DOM mutations to update the iframe height when dynamic content is added.
+  // This ensures the iframe expands when results or other elements are appended to the page.
+  const __iframeHeightObserver = new MutationObserver(() => {
+    sendHeight();
+  });
+  __iframeHeightObserver.observe(document.body, { childList: true, subtree: true });
 </script>
 
 
+    </div>
 </body>
