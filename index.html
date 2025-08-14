@@ -6235,28 +6235,18 @@ updateViewBox();
   </script>
 
 <script>
+(function () {
   function sendHeight() {
-    const buffer = 80; // adjust this number for more breathing room
-    const height = document.documentElement.scrollHeight + buffer;
-    parent.postMessage({ height: height }, "*");
+    const buffer = 80; // extra breathing room
+    const h = document.documentElement.scrollHeight + buffer;
+    parent.postMessage({ type: 'IFRAME_HEIGHT', h }, 'https://your-shopify-domain'); // lock to your shop domain
   }
-
-  // Only send height when layout changes
-  window.addEventListener("load", sendHeight);
-  window.addEventListener("resize", sendHeight);
-
-  // Optional: trigger after UI changes (like button clicks)
-  document.addEventListener("click", function () {
-    setTimeout(sendHeight, 250);
-  });
-
-  // Also observe DOM mutations to update the iframe height when dynamic content is added.
-  // This ensures the iframe expands when results or other elements are appended to the page.
-  const __iframeHeightObserver = new MutationObserver(() => {
-    sendHeight();
-  });
-  __iframeHeightObserver.observe(document.body, { childList: true, subtree: true });
+  const ro = new ResizeObserver(sendHeight);
+  ro.observe(document.documentElement);
+  window.addEventListener('load', sendHeight);
+})();
 </script>
+
 
 
     </div>
