@@ -613,21 +613,34 @@ body > *:not(.container) img[src*="opus"] {
         <div>
           <label>Hardware finish</label>
           <select id="finishType">
-            <option value="SS">SSS</option>
-            <!-- Removed PSS option for SD100 -->
-            <option value="BK">BK</option>
+            <!-- For the Lugano system only Mill or Powdercoat finishes are offered -->
+            <option value="MILL">Mill</option>
             <option value="PC">Powdercoated (specify colour)</option>
           </select>
           <input type="text" id="powdercoatColor" placeholder="Enter colour (e.g. Matt Black, White, etc.)" style="display:none;margin-top:0.5rem;">
         </div>
         <input id="cornerCount" type="hidden">
 
-        <!-- mixed‐panel checkbox -->
-        <div style="grid-column:1/2">
+        <!-- mixed‐panel checkbox: give it an id so it can be shown/hidden when switching glass modes -->
+        <div id="allowMixedContainer" style="grid-column:1/2">
           <label>
             <input type="checkbox" id="allowMixed">
             Allow mixed panel sizes (±200 mm)
           </label>
+        </div>
+        <!-- Glass Mode & Gap size selectors inserted for Lugano system -->
+        <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+          <div style="min-width:140px;">
+            <label>Glass Mode</label>
+            <select id="glassType" style="width:100%;min-width:120px;">
+              <option value="standard" selected>Standard</option>
+              <option value="stock">Stock Sizes</option>
+            </select>
+          </div>
+          <div id="gapSelectContainer" style="min-width:140px;">
+            <label>Gap size (mm)</label>
+            <select id="gapSize" style="width:100%;min-width:120px;"></select>
+          </div>
         </div>
         <div>
           <label>
@@ -909,7 +922,8 @@ if (document.querySelector('.disc-head-card')) {
     $('glassHt').value = '1000';
     $('glassThk').value = '12';
     $('handrailType').value = 'none';
-    $('finishType').value = 'mill';
+    // Default to Mill finish for Lugano system
+    $('finishType').value = 'MILL';
     $('powdercoatColor').value = '';
     $('powdercoatColor').style.display = 'none';
     $('cornerCount').value = '';
@@ -1389,11 +1403,73 @@ function refreshSelectors() {
     return null;
   };
   const groupPanels = a => {
-    const m={};a.forEach(w=>m[w]=(m[w]||0)+1);
-    return Object.entries(m).map(([w,n])=>`${n}× @${w} mm`).join('<br>');
+    // Group panel widths and format them. For continuous widths (PANEL_STEP <= 0)
+    // round to two decimal places and trim any trailing zeros. For stock mode
+    // leave widths as integers. This ensures the summary shows no more than
+    // two decimal digits for any panel width.
+    const m = {};
+    a.forEach(w => {
+      let disp;
+      if (PANEL_STEP <= 0) {
+        // round to 2 decimals then strip trailing zeros and decimal point if unnecessary
+        disp = (Math.round(w * 100) / 100).toFixed(2).replace(/\.0+$/, '').replace(/\.$/, '');
+      } else {
+        disp = String(w);
+      }
+      m[disp] = (m[disp] || 0) + 1;
+    });
+    return Object.entries(m)
+      .map(([w, n]) => `${n}× @${w} mm`)
+      .join('<br>');
   };
 
   // ─── Calculate ─────────────────────────────────────────────
+  /*
+   * Dynamic gap options and glass mode handling for Lugano system
+   * Standard mode uses a single gap value and continuous panel widths; Stock Sizes uses the default range.
+   */
+  // Panel width increment step (50mm for stock mode; 0 for continuous widths in standard mode)
+  let PANEL_STEP = 50;
+  function updateGapOptions() {
+    const fenceVal = $('fenceType') ? $('fenceType').value : 'balustrade';
+    const gapSelect = $('gapSize');
+    if (!gapSelect) return;
+    gapSelect.innerHTML = '';
+    const minGap = 10;
+    const maxGap = fenceVal === 'pool' ? 50 : 26;
+    for (let g = minGap; g <= maxGap; g++) {
+      const opt = document.createElement('option');
+      opt.value = g;
+      opt.textContent = g;
+      gapSelect.appendChild(opt);
+    }
+    // default to 20 mm if available
+    const opt20 = gapSelect.querySelector('option[value="20"]');
+    if (opt20) gapSelect.value = '20';
+    else gapSelect.selectedIndex = 0;
+  }
+  function updateGlassModeUI() {
+    const mode = $('glassType') ? $('glassType').value : 'standard';
+    const gapDiv = $('gapSelectContainer');
+    const mixDiv = $('allowMixedContainer');
+    if (mode === 'standard') {
+      if (gapDiv) gapDiv.style.display = '';
+      if (mixDiv) mixDiv.style.display = 'none';
+      updateGapOptions();
+    } else {
+      if (gapDiv) gapDiv.style.display = 'none';
+      if (mixDiv) mixDiv.style.display = '';
+    }
+  }
+  // Initialise gap options and glass mode UI on page load and when controls change
+  document.addEventListener('DOMContentLoaded', () => {
+    updateGapOptions();
+    updateGlassModeUI();
+    const fenceEl = $('fenceType');
+    if (fenceEl) fenceEl.addEventListener('change', updateGapOptions);
+    const glassEl = $('glassType');
+    if (glassEl) glassEl.addEventListener('change', updateGlassModeUI);
+  });
   $('calcBtn').onclick = function() {
     console.log('Calculate button clicked');
     
@@ -1412,7 +1488,8 @@ function refreshSelectors() {
     const hr = $('handrailType').value;
     const fin = $('finishType').value;
     const fix = $('fixingType').value;
-    const allowMix = $('allowMixed').checked;
+    // Mixed panel sizes can be disabled in standard mode; default to checkbox value but override below
+    let allowMix = $('allowMixed').checked;
     
     console.log('Calculation inputs:', {fence, thk, ht, zone, hr, fin, fix});
     
@@ -1502,9 +1579,27 @@ function refreshSelectors() {
     } else {
       cap = 2000;
     }
-    // Gap ranges updated: pool fences have 10–50 mm, balustrades have 10–26 mm
-    const gMin = 10;
-    const gMax = pool ? 50 : 26;
+    // If the "Prefer Smaller Panels" option is checked, limit maximum panel
+    // width to 1500 mm regardless of handrail or rail type. This applies
+    // equally in standard and stock modes.
+    if ($('limit4Discs') && $('limit4Discs').checked) {
+      cap = Math.min(cap, 1500);
+    }
+    // Determine gap ranges based on Glass Mode. In standard mode, use a single selected gap; in stock mode, use default ranges
+    let gMin, gMax;
+    const glassMode = $('glassType') ? $('glassType').value : 'standard';
+    const selectedGap = $('gapSize') ? +$('gapSize').value : 20;
+    // Set global panel step: 0 for continuous widths (standard) or 50mm for stock
+    PANEL_STEP = glassMode === 'standard' ? 0 : 50;
+    // Mixed panels disabled in standard mode
+    allowMix = glassMode === 'standard' ? false : allowMix;
+    if (glassMode === 'standard') {
+      gMin = selectedGap;
+      gMax = selectedGap;
+    } else {
+      gMin = 10;
+      gMax = pool ? 50 : 26;
+    }
 
     // Initialise arrays for layouts and panels, and counters for totals, rails and gaskets
     layouts = [];
@@ -1515,13 +1610,27 @@ function refreshSelectors() {
     function channelSym(run, minGap, maxGap, maxPanel) {
       let cnt = Math.ceil(run / maxPanel);
       while (cnt < 600) {
-        let pw = Math.min(maxPanel, Math.floor(run / cnt / 50) * 50);
+      // If continuous widths (PANEL_STEP <= 0) and a single gap value, compute panel width directly
+      if ((PANEL_STEP <= 0 || PANEL_STEP < 1) && Math.abs(minGap - maxGap) < 1e-9) {
+        const desiredGap = minGap;
+        let pw = (run - desiredGap * (cnt + 1)) / cnt;
+        if (pw > maxPanel) pw = maxPanel;
+        if (pw >= 200) {
+          const gap = (run - pw * cnt) / (cnt + 1);
+          if (gap >= minGap && gap <= maxGap) {
+            return { panelWidths: Array(cnt).fill(pw), gap, run };
+          }
+        }
+      }
+      // Otherwise iterate panel widths in increments of PANEL_STEP (default 50 mm)
+      const step = (PANEL_STEP > 0 ? PANEL_STEP : 50);
+      let pw = Math.min(maxPanel, Math.floor(run / cnt / step) * step);
         while (pw >= 200) {
           const gap = (run - pw * cnt) / (cnt + 1);
           if (gap >= minGap && gap <= maxGap) {
             return { panelWidths: Array(cnt).fill(pw), gap, run };
           }
-          pw -= 50;
+          pw -= step;
         }
         cnt++;
       }
@@ -1530,8 +1639,9 @@ function refreshSelectors() {
     function channelMix(run, minGap, maxGap, maxPanel) {
       let cnt = Math.ceil(run / maxPanel);
       while (cnt < 600) {
-        for (let A = maxPanel; A >= 200; A -= 50) {
-          for (let B = A; B >= A - 200; B -= 50) {
+        const step = (PANEL_STEP > 0 ? PANEL_STEP : 50);
+        for (let A = maxPanel; A >= 200; A -= step) {
+          for (let B = A; B >= A - 200; B -= step) {
             for (let k = 1; k < cnt; k++) {
               const tot = (cnt - k) * A + k * B;
               const gap = (run - tot) / (cnt + 1);
@@ -2020,13 +2130,17 @@ function refreshSelectors() {
     const panelSummary = groupPanels(panels);
     // Calculate channel lengths required (each kit is 4800mm)
     const channelLengthsNeeded = Math.ceil(total / 4800);
+    // Only display the gap range row when the gap can vary (i.e. stock mode). In standard mode the gap is fixed
+    const gapRow = (gMin !== gMax)
+      ? `<tr><th>Gap range</th><td>${gMin}–${gMax} mm</td></tr>`
+      : '';
     $('output').innerHTML=`
       <table class="results-table">
         <tr><th>Total run</th><td>${total} mm</td></tr>
         <tr><th>Panels</th><td>${panelSummary}</td></tr>
         <tr><th>Channel lengths</th><td>${channelLengthsNeeded} × 4.8 m</td></tr>
         <tr><th>Max panel width</th><td>${cap} mm</td></tr>
-        <tr><th>Gap range</th><td>${gMin}–${gMax} mm</td></tr>
+        ${gapRow}
       </table>`;
 
     // order list
@@ -2256,8 +2370,8 @@ function refreshSelectors() {
     // Function to get description for item codes
     function getItemDescription(code) {
       // Lugano channel kits
-      if (code.startsWith('LC48KIT1')) return 'Lugano Channel Kit for 12mm Glass (4.8m)';
-      if (code.startsWith('LC48KIT2')) return 'Lugano Channel Kit for 13.52mm Glass (4.8m)';
+      if (code.startsWith('LC48KIT1')) return 'Lugano Channel Kit for 12/15mm Glass (4.8m)';
+      if (code.startsWith('LC48KIT2')) return 'Lugano Channel Kit for 13.52/17.52mm Glass (4.8m)';
       // Disc types - SD100 uses single standoff discs.  Map codes accordingly.
       if (code.includes('ASD100-SH')) return 'Adjustable Screw Head Standoff Disc';
       if (code.includes('ASD100-FH')) return 'Adjustable Flat Head Standoff Disc';
@@ -2298,15 +2412,15 @@ function refreshSelectors() {
       // Gaskets - exact matches first
       if (code === 'S25GR') return 'S25 Handrail Gasket';
       if (code === 'S40GR1') return 'S40 Handrail Gasket';
-      if (code === 'AHGR1') return 'AH40 Handrail Gasket';
+      if (code === 'AHGR1') return 'AH40 Aluminium Handrail Gasket';
       if (code === 'R40GR1') return 'R40 Handrail Gasket';
       if (code.includes('GR-GATE')) return 'Gate Handrail Gasket';
       if (code.endsWith('-GATE') && code.includes('GR')) return 'Gate Handrail Gasket';
       
       // Joiners - comprehensive matching for all handrail types
-      if (code === 'AHJ180') return 'Aluminium Handrail Straight Joiner (180°)';
-      if (code === 'AHJ90') return 'AAluminium Handrail 90° Corner Joiner';
-      if (code === 'AHAHJ') return 'Aluminium Handrail Adjustable Horizontal Joiner';
+      if (code === 'AHJ180') return 'AH40 Aluminium Handrail Straight Joiner (180°)';
+      if (code === 'AHJ90') return 'AH40 Aluminium Handrail 90° Corner Joiner';
+      if (code === 'AHAHJ') return 'AH40 Aluminium Handrail Adjustable Horizontal Joiner';
       
       // S40 joiners
       if (code.startsWith('S40J180')) return 'S40 Straight Joiner (180°)';
@@ -3328,11 +3442,22 @@ panelsToProcess.forEach((pw, panelIndex) => {
   }
 
   // Add panel measurement label
-const t = document.createElementNS(NS,'text');
-t.textContent = `${pw} mm`;
-t.setAttribute('font-size', '25');           // Larger
-t.setAttribute('font-weight', 'bold');        // Bold
-t.setAttribute('fill', '#111');               // Black
+  const t = document.createElementNS(NS,'text');
+  // For continuous widths (standard mode) round to two decimal places and trim
+  // trailing zeros; for stock mode leave as integer. This prevents long
+  // repeating decimals from appearing on the drawing.
+  let dispPw;
+  if (PANEL_STEP <= 0) {
+    dispPw = (Math.round(pw * 100) / 100).toFixed(2)
+      .replace(/\.0+$/, '')
+      .replace(/\.$/, '');
+  } else {
+    dispPw = String(pw);
+  }
+  t.textContent = `${dispPw} mm`;
+  t.setAttribute('font-size', '25');           // Larger
+  t.setAttribute('font-weight', 'bold');        // Bold
+  t.setAttribute('fill', '#111');               // Black
   if (dx) {
     // Horizontal panel - position measurement based on direction
     t.setAttribute('x', panelCenterX);
@@ -3971,7 +4096,18 @@ svg.appendChild(overallLabel);
         
         // Panel length label with proper orientation
         const t = document.createElementNS(NS,'text');
-        t.textContent = `${Math.round(pw)} mm`;
+        // For continuous widths round to two decimals and trim trailing zeros;
+        // for stock mode use integer widths. This avoids displaying long
+        // repeating decimals on panel labels.
+        let dispPw;
+        if (PANEL_STEP <= 0) {
+          dispPw = (Math.round(pw * 100) / 100).toFixed(2)
+            .replace(/\.0+$/, '')
+            .replace(/\.$/, '');
+        } else {
+          dispPw = String(Math.round(pw));
+        }
+        t.textContent = `${dispPw} mm`;
         t.setAttribute('font-size', String(PANEL_FONT));
         t.setAttribute('font-weight', 'bold');
         t.setAttribute('fill', 'rgb(20,80,160)');
@@ -4768,7 +4904,8 @@ function generate3DViewHTML(data) {
   html += '};';
   html += 'const profile = RAIL_PROFILES[handrailType];';
   html += 'if (profile) {';
-  html += 'const finishType = ' + JSON.stringify(data.finishType || 'mill') + ';';
+  // Use MILL as the default finish in 3D view when none specified
+  html += 'const finishType = ' + JSON.stringify(data.finishType || 'MILL') + ';';
   html += 'const isBlackFinish = finishType.toLowerCase().includes("black") || finishType.toLowerCase().includes("matt black");';
   html += 'let railMaterial;';
   html += 'if (isBlackFinish) {';
@@ -6233,6 +6370,21 @@ updateViewBox();
   }
 
   </script>
+
+<!-- Override hardware finish options after initial scripts run -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const finishSel = document.getElementById('finishType');
+    if (finishSel) {
+      // Replace finish options to only Mill and Powdercoat for Lugano system
+      finishSel.innerHTML = '<option value="MILL">Mill</option><option value="PC">Powdercoated (specify colour)</option>';
+      // If previously selected value is not one of the allowed options, reset to Mill
+      if (![...finishSel.options].some(opt => opt.value === finishSel.value)) {
+        finishSel.value = 'MILL';
+      }
+    }
+  });
+</script>
 
 <script>
 (function () {
