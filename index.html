@@ -2256,8 +2256,8 @@ function refreshSelectors() {
     // Function to get description for item codes
     function getItemDescription(code) {
       // Lugano channel kits
-      if (code.startsWith('LC48KIT1')) return 'Lugano Channel Kit for 12/15mm Glass (4.8m)';
-      if (code.startsWith('LC48KIT2')) return 'Lugano Channel Kit for 13.52/17.52mm Glass (4.8m)';
+      if (code.startsWith('LC48KIT1')) return 'Lugano Channel Kit for 12mm Glass (4.8m)';
+      if (code.startsWith('LC48KIT2')) return 'Lugano Channel Kit for 13.52mm Glass (4.8m)';
       // Disc types - SD100 uses single standoff discs.  Map codes accordingly.
       if (code.includes('ASD100-SH')) return 'Adjustable Screw Head Standoff Disc';
       if (code.includes('ASD100-FH')) return 'Adjustable Flat Head Standoff Disc';
@@ -2298,15 +2298,15 @@ function refreshSelectors() {
       // Gaskets - exact matches first
       if (code === 'S25GR') return 'S25 Handrail Gasket';
       if (code === 'S40GR1') return 'S40 Handrail Gasket';
-      if (code === 'AHGR1') return 'AH40 Aluminium Handrail Gasket';
+      if (code === 'AHGR1') return 'AH40 Handrail Gasket';
       if (code === 'R40GR1') return 'R40 Handrail Gasket';
       if (code.includes('GR-GATE')) return 'Gate Handrail Gasket';
       if (code.endsWith('-GATE') && code.includes('GR')) return 'Gate Handrail Gasket';
       
       // Joiners - comprehensive matching for all handrail types
-      if (code === 'AHJ180') return 'AH40 Aluminium Handrail Straight Joiner (180°)';
-      if (code === 'AHJ90') return 'AH40 Aluminium Handrail 90° Corner Joiner';
-      if (code === 'AHAHJ') return 'AH40 Aluminium Handrail Adjustable Horizontal Joiner';
+      if (code === 'AHJ180') return 'Aluminium Handrail Straight Joiner (180°)';
+      if (code === 'AHJ90') return 'AAluminium Handrail 90° Corner Joiner';
+      if (code === 'AHAHJ') return 'Aluminium Handrail Adjustable Horizontal Joiner';
       
       // S40 joiners
       if (code.startsWith('S40J180')) return 'S40 Straight Joiner (180°)';
